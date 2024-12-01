@@ -1,8 +1,10 @@
 {
+  "env": {
+    "NEXT_PUBLIC_PINATA_JWT": "@pinata_jwt"
+  },
   "build": {
     "env": {
-      "NEXT_PUBLIC_PINATA_JWT": "@pinata_jwt",
-      "REACT_APP_PINATA_JWT": "@pinata_jwt"
+      "NEXT_PUBLIC_PINATA_JWT": "@pinata_jwt"
     }
   }
 } 

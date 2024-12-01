@@ -1,10 +1,10 @@
-const PINATA_JWT = process.env.REACT_APP_PINATA_JWT || process.env.NEXT_PUBLIC_PINATA_JWT;
-const PINATA_GATEWAY = process.env.REACT_APP_PINATA_GATEWAY || "gateway.pinata.cloud";
+const PINATA_JWT = process.env.NEXT_PUBLIC_PINATA_JWT;
 
-console.log('JWT Check:', {
-  exists: !!PINATA_JWT,
-  length: PINATA_JWT?.length,
-  firstChars: PINATA_JWT?.substring(0, 20)
+// Debug logging
+console.log('Environment Check:', {
+  hasJWT: !!PINATA_JWT,
+  jwtLength: PINATA_JWT?.length || 0,
+  envType: process.env.NODE_ENV
 });
 
 export const uploadFileToPinata = async (file) => {
@@ -12,14 +12,8 @@ export const uploadFileToPinata = async (file) => {
     throw new Error('No file provided');
   }
 
-  console.log('Environment check:', {
-    hasReactEnv: !!process.env.REACT_APP_PINATA_JWT,
-    hasNextEnv: !!process.env.NEXT_PUBLIC_PINATA_JWT,
-    finalJWT: !!PINATA_JWT
-  });
-
   if (!PINATA_JWT) {
-    throw new Error('Pinata JWT is not configured in environment');
+    throw new Error('Pinata JWT is not configured');
   }
 
   try {
@@ -28,24 +22,44 @@ export const uploadFileToPinata = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
 
+    const pinataMetadata = JSON.stringify({
+      name: file.name,
+    });
+    formData.append('pinataMetadata', pinataMetadata);
+
+    const pinataOptions = JSON.stringify({
+      cidVersion: 1
+    });
+    formData.append('pinataOptions', pinataOptions);
+
     const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PINATA_JWT.trim()}`
+        'Authorization': `Bearer ${PINATA_JWT}`
       },
       body: formData
     });
 
-    const result = await response.json();
-    
     if (!response.ok) {
-      console.error('Pinata error response:', result);
-      throw new Error(`Pinata upload failed: ${result.error?.details || JSON.stringify(result)}`);
+      const errorData = await response.json();
+      console.error('Pinata API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
+      throw new Error(`Pinata API Error: ${response.status} - ${JSON.stringify(errorData)}`);
     }
 
+    const result = await response.json();
+    console.log('Pinata upload successful:', result);
+    
     return result.IpfsHash;
   } catch (error) {
-    console.error('Pinata upload error:', error);
+    console.error('Pinata upload error:', {
+      message: error.message,
+      stack: error.stack,
+      jwt: PINATA_JWT ? 'Present' : 'Missing'
+    });
     throw error;
   }
 };
@@ -78,5 +92,5 @@ export const uploadJSONToPinata = async (jsonData) => {
 };
 
 export const getPinataUrl = (cid) => {
-  return `https://${PINATA_GATEWAY}/ipfs/${cid}`;
+  return `https://gateway.pinata.cloud/ipfs/${cid}`;
 }; 
