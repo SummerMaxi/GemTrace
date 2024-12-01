@@ -4,6 +4,19 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { uploadFileToPinata, uploadJSONToPinata, getPinataUrl } from './utils/pinata';
 import { useAccount, useWalletClient } from 'wagmi';
 import { mintGemNFT } from './utils/contract';
+import { providers } from 'ethers';
+
+// Function to convert WalletClient to Ethers Signer
+function walletClientToSigner(walletClient) {
+  const { account, chain, transport } = walletClient;
+  const network = {
+    chainId: chain.id,
+    name: chain.name,
+    ensAddress: chain.contracts?.ensRegistry?.address,
+  };
+  const provider = new providers.Web3Provider(transport, network);
+  return provider.getSigner(account.address);
+}
 
 function App() {
   const { address } = useAccount();
@@ -25,34 +38,41 @@ function App() {
   });
   const [mintStatus, setMintStatus] = useState({ loading: false, error: null, hash: null });
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+  // File input handler
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
     if (file) {
-      setGemImage(URL.createObjectURL(file));
+      console.log('File selected:', file);
+      setGemImage(file);
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!gemImage) {
+      alert('Please select an image first');
+      return;
+    }
+
     if (!address || !walletClient) {
       alert("Please connect your wallet first!");
       return;
     }
 
     try {
-      setUploadStatus({ loading: true, success: false, error: null });
-      setMintStatus({ loading: true, error: null, hash: null });
-
-      // Convert walletClient to ethers signer
-      const signer = await walletClient.toEthers();
+      console.log("Starting upload process...");
+      console.log("Image file:", gemImage);
       
-      // 1. Upload image to IPFS
-      const imageUrl = await uploadFileToPinata(gemImage);
+      // Upload image
+      const imageHash = await uploadFileToPinata(gemImage);
+      console.log("Image uploaded successfully:", imageHash);
       
-      // 2. Create metadata
+      // Create metadata
       const metadata = {
         name: gemData.name,
         description: gemData.description,
-        image: getPinataUrl(imageUrl),
+        image: getPinataUrl(imageHash),
         attributes: [
           { trait_type: "Mineral Name", value: gemData.name },
           { trait_type: "Locality", value: gemData.locality },
@@ -61,18 +81,37 @@ function App() {
           { trait_type: "Description", value: gemData.description }
         ]
       };
-      
-      // 3. Upload metadata to IPFS
-      const metadataUrl = await uploadJSONToPinata(metadata);
-      
+
+      // Upload metadata
+      const metadataHash = await uploadJSONToPinata(metadata);
+      console.log("Metadata uploaded:", metadataHash);
+
+      // 3. Convert wallet client to signer
+      console.log("Converting wallet client to signer...");
+      const signer = walletClientToSigner(walletClient);
+
       // 4. Mint NFT
-      const receipt = await mintGemNFT(signer, getPinataUrl(metadataUrl), gemData);
-      
+      console.log("Minting NFT...");
+      const receipt = await mintGemNFT(
+        signer,
+        getPinataUrl(metadataHash),
+        {
+          name: gemData.name,
+          locality: gemData.locality,
+          weight: gemData.weight.toString(),
+          size: gemData.size,
+          description: gemData.description
+        }
+      );
+
+      console.log("NFT minted! Transaction:", receipt);
+
+      // 5. Update UI states
       setUploadStatus({
         loading: false,
         success: true,
-        imageUrl: getPinataUrl(imageUrl),
-        metadataUrl: getPinataUrl(metadataUrl)
+        imageUrl: getPinataUrl(imageHash),
+        metadataUrl: getPinataUrl(metadataHash)
       });
 
       setMintStatus({
@@ -81,13 +120,15 @@ function App() {
         hash: receipt.transactionHash
       });
 
-      // Optional: Add success message
-      const tokenId = receipt.events.find(e => e.event === 'MineralMinted').args.tokenId;
-      alert(`NFT minted successfully! Token ID: ${tokenId}`);
+      alert(`Success! NFT Minted. Transaction Hash: ${receipt.transactionHash}`);
 
     } catch (error) {
-      setUploadStatus({ loading: false, success: false, error: error.message });
-      setMintStatus({ loading: false, error: error.message, hash: null });
+      console.error("Error in process:", error);
+      setMintStatus({
+        loading: false,
+        error: error.message,
+        hash: null
+      });
     }
   };
 
@@ -121,7 +162,7 @@ function App() {
               {gemImage ? (
                 <div className="relative h-full group">
                   <img
-                    src={gemImage}
+                    src={URL.createObjectURL(gemImage)}
                     alt="Uploaded gem"
                     className="w-full h-full object-cover"
                   />
@@ -139,7 +180,7 @@ function App() {
                   <PhotoIcon className="w-12 h-12 text-bento-300 mb-2" />
                   <p className="text-sm font-medium text-bento-400">Drop image here</p>
                   <p className="text-xs text-bento-300">or click to upload</p>
-                  <input type="file" className="hidden" onChange={handleImageUpload} accept="image/*" />
+                  <input type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
                 </label>
               )}
             </div>
@@ -244,24 +285,24 @@ function App() {
             <div className="mt-4">
               {mintStatus.loading && (
                 <div className="text-blue-600">
-                  Minting your NFT... Please wait and confirm the transaction.
+                  Minting your NFT... Please confirm the transaction in your wallet.
                 </div>
               )}
               {mintStatus.error && (
                 <div className="text-red-600">
-                  Error minting NFT: {mintStatus.error}
+                  Error: {mintStatus.error}
                 </div>
               )}
               {mintStatus.hash && (
                 <div className="text-green-600">
-                  ✅ NFT Minted! Transaction Hash: 
+                  ✅ NFT Minted! View transaction: 
                   <a 
                     href={`https://sepolia.basescan.org/tx/${mintStatus.hash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline ml-1"
                   >
-                    View on BaseScan
+                    {mintStatus.hash.slice(0, 6)}...{mintStatus.hash.slice(-4)}
                   </a>
                 </div>
               )}

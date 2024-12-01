@@ -1,96 +1,76 @@
-console.log('Pinata JWT exists:', !!process.env.REACT_APP_PINATA_JWT);
-console.log('Pinata Gateway exists:', !!process.env.REACT_APP_PINATA_GATEWAY);
+const PINATA_JWT = process.env.REACT_APP_PINATA_JWT;
+const PINATA_GATEWAY = process.env.REACT_APP_PINATA_GATEWAY || "gateway.pinata.cloud";
 
-function validateJWT(jwt) {
-  if (!jwt) {
-    throw new Error('Pinata JWT is missing');
-  }
-  
-  // JWT should have 3 parts separated by dots
-  const parts = jwt.split('.');
-  if (parts.length !== 3) {
-    throw new Error('Invalid JWT format: token should have three parts');
+export const uploadFileToPinata = async (file) => {
+  if (!file) {
+    throw new Error('No file provided');
   }
 
-  // JWT should start with 'ey'
-  if (!jwt.startsWith('ey')) {
-    throw new Error('Invalid JWT format: token should start with "ey"');
-  }
-
-  return true;
-}
-
-export async function uploadFileToPinata(file) {
-  const jwt = process.env.REACT_APP_PINATA_JWT;
-  
   try {
-    validateJWT(jwt);
+    console.log('Preparing file upload...', file.name);
     
-    const url = `https://api.pinata.cloud/pinning/pinFileToIPFS`;
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(url, {
+    const pinataMetadata = JSON.stringify({
+      name: file.name,
+    });
+    formData.append('pinataMetadata', pinataMetadata);
+
+    const pinataOptions = JSON.stringify({
+      cidVersion: 1,
+    });
+    formData.append('pinataOptions', pinataOptions);
+
+    const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${jwt}`
+        'Authorization': `Bearer ${PINATA_JWT}`
       },
       body: formData
     });
 
+    const result = await response.json();
+    console.log('Pinata upload response:', result);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Pinata API Error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`Pinata API Error (${response.status}): ${errorText}`);
+      throw new Error(`Pinata upload failed: ${result.error?.details || 'Unknown error'}`);
     }
 
-    const result = await response.json();
-    return result;
+    return result.IpfsHash;
   } catch (error) {
     console.error('Pinata upload error:', error);
     throw error;
   }
-}
+};
 
-export async function uploadJSONToPinata(jsonData) {
-  const jwt = process.env.REACT_APP_PINATA_JWT;
-  
+export const uploadJSONToPinata = async (jsonData) => {
   try {
-    validateJWT(jwt);
+    console.log('Uploading JSON data:', jsonData);
     
-    const url = `https://api.pinata.cloud/pinning/pinJSONToIPFS`;
-
-    const response = await fetch(url, {
+    const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${jwt}`
+        'Authorization': `Bearer ${PINATA_JWT}`
       },
       body: JSON.stringify(jsonData)
     });
 
+    const result = await response.json();
+    console.log('JSON upload response:', result);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Pinata API Error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`Pinata API Error (${response.status}): ${errorText}`);
+      throw new Error(`Pinata JSON upload failed: ${result.error?.details || 'Unknown error'}`);
     }
 
-    const result = await response.json();
-    return result;
+    return result.IpfsHash;
   } catch (error) {
     console.error('Pinata JSON upload error:', error);
     throw error;
   }
-}
+};
 
-export function getPinataUrl(ipfsHash) {
-  return `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
-} 
+export const getPinataUrl = (cid) => {
+  return `https://${PINATA_GATEWAY}/ipfs/${cid}`;
+}; 
