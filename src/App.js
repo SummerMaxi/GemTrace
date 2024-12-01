@@ -5,6 +5,7 @@ import { uploadFileToPinata, uploadJSONToPinata, getPinataUrl } from './utils/pi
 import { useAccount, useWalletClient } from 'wagmi';
 import { mintGemNFT } from './utils/contract';
 import { providers } from 'ethers';
+import { QRCodeSVG } from 'qrcode.react';
 
 // Function to convert WalletClient to Ethers Signer
 function walletClientToSigner(walletClient) {
@@ -37,6 +38,7 @@ function App() {
     description: ''
   });
   const [mintStatus, setMintStatus] = useState({ loading: false, error: null, hash: null });
+  const [mintedTokenId, setMintedTokenId] = useState(null);
 
   // File input handler
   const handleFileChange = (event) => {
@@ -104,6 +106,13 @@ function App() {
         }
       );
 
+      // Get token ID from receipt
+      const event = receipt.events.find(e => e.event === 'MineralMinted');
+      const tokenId = event.args.tokenId.toString();
+      
+      // Set the minted token ID
+      setMintedTokenId(tokenId);
+
       console.log("NFT minted! Transaction:", receipt);
 
       // 5. Update UI states
@@ -120,7 +129,7 @@ function App() {
         hash: receipt.transactionHash
       });
 
-      alert(`Success! NFT Minted. Transaction Hash: ${receipt.transactionHash}`);
+      alert(`NFT Minted Successfully! Token ID: ${tokenId}`);
 
     } catch (error) {
       console.error("Error in process:", error);
@@ -130,6 +139,10 @@ function App() {
         hash: null
       });
     }
+  };
+
+  const getOpenSeaURL = (tokenId) => {
+    return `https://testnets.opensea.io/assets/base-sepolia/0xd09f301af1a674724b4973c7a8c43eec6af834bc/${tokenId}`;
   };
 
   return (
@@ -295,18 +308,34 @@ function App() {
               )}
               {mintStatus.hash && (
                 <div className="text-green-600">
-                  ✅ NFT Minted! View transaction: 
-                  <a 
-                    href={`https://sepolia.basescan.org/tx/${mintStatus.hash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline ml-1"
-                  >
-                    {mintStatus.hash.slice(0, 6)}...{mintStatus.hash.slice(-4)}
-                  </a>
+                  ✅ NFT Minted! Transaction Hash: {mintStatus.hash}
                 </div>
               )}
             </div>
+
+            {/* Add QR Code section after successful mint */}
+            {mintedTokenId && (
+              <div className="mt-8 p-4 border rounded-lg bg-white shadow-md">
+                <h3 className="text-lg font-semibold mb-4">View on OpenSea</h3>
+                <div className="flex flex-col items-center">
+                  <QRCodeSVG 
+                    value={getOpenSeaURL(mintedTokenId)}
+                    size={200}
+                    level="H"
+                    includeMargin={true}
+                    className="mb-4"
+                  />
+                  <a
+                    href={getOpenSeaURL(mintedTokenId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    View NFT on OpenSea
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
