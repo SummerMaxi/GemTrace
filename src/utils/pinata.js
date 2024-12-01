@@ -1,9 +1,25 @@
-const PINATA_JWT = process.env.REACT_APP_PINATA_JWT;
+const PINATA_JWT = process.env.REACT_APP_PINATA_JWT || process.env.NEXT_PUBLIC_PINATA_JWT;
 const PINATA_GATEWAY = process.env.REACT_APP_PINATA_GATEWAY || "gateway.pinata.cloud";
+
+console.log('JWT Check:', {
+  exists: !!PINATA_JWT,
+  length: PINATA_JWT?.length,
+  firstChars: PINATA_JWT?.substring(0, 20)
+});
 
 export const uploadFileToPinata = async (file) => {
   if (!file) {
     throw new Error('No file provided');
+  }
+
+  console.log('Environment check:', {
+    hasReactEnv: !!process.env.REACT_APP_PINATA_JWT,
+    hasNextEnv: !!process.env.NEXT_PUBLIC_PINATA_JWT,
+    finalJWT: !!PINATA_JWT
+  });
+
+  if (!PINATA_JWT) {
+    throw new Error('Pinata JWT is not configured in environment');
   }
 
   try {
@@ -12,29 +28,19 @@ export const uploadFileToPinata = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const pinataMetadata = JSON.stringify({
-      name: file.name,
-    });
-    formData.append('pinataMetadata', pinataMetadata);
-
-    const pinataOptions = JSON.stringify({
-      cidVersion: 1,
-    });
-    formData.append('pinataOptions', pinataOptions);
-
     const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${PINATA_JWT}`
+        'Authorization': `Bearer ${PINATA_JWT.trim()}`
       },
       body: formData
     });
 
     const result = await response.json();
-    console.log('Pinata upload response:', result);
-
+    
     if (!response.ok) {
-      throw new Error(`Pinata upload failed: ${result.error?.details || 'Unknown error'}`);
+      console.error('Pinata error response:', result);
+      throw new Error(`Pinata upload failed: ${result.error?.details || JSON.stringify(result)}`);
     }
 
     return result.IpfsHash;
