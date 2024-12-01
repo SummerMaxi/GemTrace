@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { PhotoIcon } from '@heroicons/react/24/outline';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { uploadFileToPinata, uploadJSONToPinata, getPinataUrl } from './utils/pinata';
+import { useAccount, useWalletClient } from 'wagmi';
+import { mintGemNFT } from './utils/contract';
 
 function App() {
+  const { address } = useAccount();
+  const { data: walletClient } = useWalletClient();
   const [gemImage, setGemImage] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({
     loading: false,
@@ -19,6 +23,7 @@ function App() {
     size: '',
     description: ''
   });
+  const [mintStatus, setMintStatus] = useState({ loading: false, error: null, hash: null });
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -27,60 +32,62 @@ function App() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setUploadStatus({ loading: true, success: false, error: null });
-    
+  const handleSubmit = async () => {
+    if (!address || !walletClient) {
+      alert("Please connect your wallet first!");
+      return;
+    }
+
     try {
-      if (!gemImage) {
-        throw new Error('Please select an image first');
-      }
+      setUploadStatus({ loading: true, success: false, error: null });
+      setMintStatus({ loading: true, error: null, hash: null });
 
-      // Convert base64 image URL to File object
-      const response = await fetch(gemImage);
-      const blob = await response.blob();
-      const imageFile = new File([blob], 'gem-image.jpg', { type: 'image/jpeg' });
-
-      // Upload image to Pinata
-      const imageUploadResult = await uploadFileToPinata(imageFile);
-      const imageIpfsHash = imageUploadResult.IpfsHash;
-      const imageUrl = getPinataUrl(imageIpfsHash);
-
-      // Prepare and upload metadata
+      // Convert walletClient to ethers signer
+      const signer = await walletClient.toEthers();
+      
+      // 1. Upload image to IPFS
+      const imageUrl = await uploadFileToPinata(gemImage);
+      
+      // 2. Create metadata
       const metadata = {
-        ...gemData,
-        imageIpfsHash,
-        timestamp: new Date().toISOString()
+        name: gemData.name,
+        description: gemData.description,
+        image: getPinataUrl(imageUrl),
+        attributes: [
+          { trait_type: "Mineral Name", value: gemData.name },
+          { trait_type: "Locality", value: gemData.locality },
+          { trait_type: "Weight", value: gemData.weight },
+          { trait_type: "Size", value: gemData.size },
+          { trait_type: "Description", value: gemData.description }
+        ]
       };
-
-      const metadataUploadResult = await uploadJSONToPinata(metadata);
-      const metadataUrl = getPinataUrl(metadataUploadResult.IpfsHash);
-
+      
+      // 3. Upload metadata to IPFS
+      const metadataUrl = await uploadJSONToPinata(metadata);
+      
+      // 4. Mint NFT
+      const receipt = await mintGemNFT(signer, getPinataUrl(metadataUrl), gemData);
+      
       setUploadStatus({
         loading: false,
         success: true,
-        error: null,
-        imageUrl,
-        metadataUrl
+        imageUrl: getPinataUrl(imageUrl),
+        metadataUrl: getPinataUrl(metadataUrl)
       });
 
-      // Reset form
-      setGemImage(null);
-      setGemData({
-        name: '',
-        locality: '',
-        weight: '',
-        size: '',
-        description: ''
+      setMintStatus({
+        loading: false,
+        error: null,
+        hash: receipt.transactionHash
       });
+
+      // Optional: Add success message
+      const tokenId = receipt.events.find(e => e.event === 'MineralMinted').args.tokenId;
+      alert(`NFT minted successfully! Token ID: ${tokenId}`);
 
     } catch (error) {
-      console.error('Upload error:', error);
-      setUploadStatus({
-        loading: false,
-        success: false,
-        error: error.message || 'Failed to upload to IPFS'
-      });
+      setUploadStatus({ loading: false, success: false, error: error.message });
+      setMintStatus({ loading: false, error: error.message, hash: null });
     }
   };
 
@@ -233,6 +240,32 @@ function App() {
                 )}
               </div>
             )}
+
+            <div className="mt-4">
+              {mintStatus.loading && (
+                <div className="text-blue-600">
+                  Minting your NFT... Please wait and confirm the transaction.
+                </div>
+              )}
+              {mintStatus.error && (
+                <div className="text-red-600">
+                  Error minting NFT: {mintStatus.error}
+                </div>
+              )}
+              {mintStatus.hash && (
+                <div className="text-green-600">
+                  ✅ NFT Minted! Transaction Hash: 
+                  <a 
+                    href={`https://sepolia.basescan.org/tx/${mintStatus.hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline ml-1"
+                  >
+                    View on BaseScan
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
