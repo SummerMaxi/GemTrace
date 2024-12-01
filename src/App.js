@@ -142,7 +142,7 @@ function App() {
   };
 
   const getOpenSeaURL = (tokenId) => {
-    return `https://testnets.opensea.io/assets/base-sepolia/0xd09f301af1a674724b4973c7a8c43eec6af834bc/${tokenId}`;
+    return `https://testnets.opensea.io/assets/base-sepolia/0xd4e0b89622e829916e2eadceb5c52ae3594e5f11/${tokenId}`;
   };
 
   return (

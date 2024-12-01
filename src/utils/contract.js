@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 
-const CONTRACT_ADDRESS = "0xd09f301af1a674724b4973c7a8c43eec6af834bc";
+const CONTRACT_ADDRESS = "0xd4e0b89622e829916e2eadceb5c52ae3594e5f11";
 
 // Full ABI for GemTraceNFT
 const CONTRACT_ABI = [
